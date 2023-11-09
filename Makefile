@@ -20,12 +20,12 @@ exec:
 
 run-bridge:
 	@echo "Running docker image $(ProjectName)"
-	docker run -p 8888:8000 --dns 8.8.8.8 --rm -it --name $(ProjectName) -d $(ProjectName)
+	docker run -p 8888:8000 --dns 8.8.8.8 --env-file .env --rm -it --name $(ProjectName) -d $(ProjectName)
 .PHONY: run
 
 run-host:
 	@echo "Running docker image $(ProjectName)"
-	docker run --net=host --dns 8.8.8.8 --rm -it --name $(ProjectName) -d $(ProjectName)
+	docker run --net=host --dns 8.8.8.8 --env-file .env --rm -it --name $(ProjectName) -d $(ProjectName)
 .PHONY: run
 
 logs:

@@ -1,5 +1,6 @@
 
 var path = require('path');
+var mqttDaten = null
 var express = require ('express');
 var dotenv = require ('dotenv');
 dotenv.config();
@@ -8,7 +9,58 @@ const key = "/?"+process.env.KEY_QUERY+"="
 const app = express();
 const url = process.env.KEY_URL;
 const {log} = require("./utils");
+const {getEcoFlowMqttData, setupMQTTConnection, setAC, setPrio} = require(path.resolve( __dirname, "./ecoflow.js" ) );
 let mqttDaten = {};
+
+log("Starting app listening at port " + port)
+
+log("With credential " + process.env.KEY_MAIL + ', ' + process.env.KEY_PASSWORD)
+
+mqttDaten = getEcoFlowMqttData(process.env.KEY_MAIL, process.env.KEY_PASSWORD)
+.then(mqttDaten => {
+
+    if (mqttDaten) {
+        log('recevied datas from Ecoflow MQTT broker', mqttDaten)
+        
+        setupMQTTConnection(mqttDaten)
+          .then (client => {
+            client.on('connect', function () {
+              log('connected to Ecoflow MQTT broker')
+              //console.log('Connecté au courtier Ecoflow MQTT');
+              client.subscribe(['#'], () => {
+                  log('Subscribe to Ecoflow MQTT topic #')
+              })
+/*
+              if (v && v*1>=0) {
+                setAC(client, process.env.KEY_POWERSTREAM_SN,v*10);
+              }
+              else {
+                log(process.env.KEY_QUERY_AC + ' must be grater than 0')
+              }
+              if (v2 && (v2*1===0 || v2*1===1)) {
+                setPrio(client, process.env.KEY_POWERSTREAM_SN,v2);
+              }
+              else {
+                log(process.env.KEY_POWERSTREAM_SN + ' must be 0 or 1')
+              }
+              setTimeout(() => {
+                log('disconnect to Ecoflow MQTT broker')                    
+                client.end();
+              }, "3000");
+              //isMqttConnected = true
+*/
+          })
+        })
+        .catch();
+
+    }
+
+})
+.catch();
+
+app.get('/test', (req, res) => {
+    log('recevied datas from Ecoflow MQTT broker', mqttDaten)
+});
 
 app.get('/'+url, (req, res) => {
   if (process.env.TOKEN && req.query[process.env.TOKEN] && (req.query[process.env.TOKEN] = process.env.TOKEN_VAL)) {
@@ -79,8 +131,6 @@ app.get('/'+url, (req, res) => {
 app.use((req, res) => {res.status(404).send('Not found!')});
 
 var server = app.listen(port, () => {
-   var host = server.address().address;
-   var port = server.address().port;
-   
-   log("Starting app listening at port " + port)
+    var host = server.address().address;
+    var port = server.address().port;
 });
