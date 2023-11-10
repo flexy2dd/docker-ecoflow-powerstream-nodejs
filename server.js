@@ -1,6 +1,5 @@
 
 var path = require('path');
-var mqttDaten = null
 var express = require ('express');
 var dotenv = require ('dotenv');
 dotenv.config();
@@ -10,127 +9,139 @@ const app = express();
 const url = process.env.KEY_URL;
 const {log} = require("./utils");
 const {getEcoFlowMqttData, setupMQTTConnection, setAC, setPrio} = require(path.resolve( __dirname, "./ecoflow.js" ) );
+
+var clientMqtt = {};
+var isMqttConnected = false;
 let mqttDaten = {};
+let mqttClient = {};
 
-log("Starting app listening at port " + port)
+log("Starting app listening at port " + port);
 
-log("With credential " + process.env.KEY_MAIL + ', ' + process.env.KEY_PASSWORD)
-
-mqttDaten = getEcoFlowMqttData(process.env.KEY_MAIL, process.env.KEY_PASSWORD)
-.then(mqttDaten => {
-
-    if (mqttDaten) {
-        log('recevied datas from Ecoflow MQTT broker', mqttDaten)
-        
-        setupMQTTConnection(mqttDaten)
-          .then (client => {
-            client.on('connect', function () {
-              log('connected to Ecoflow MQTT broker')
-              //console.log('Connecté au courtier Ecoflow MQTT');
-              client.subscribe(['#'], () => {
-                  log('Subscribe to Ecoflow MQTT topic #')
-              })
-/*
-              if (v && v*1>=0) {
-                setAC(client, process.env.KEY_POWERSTREAM_SN,v*10);
-              }
-              else {
-                log(process.env.KEY_QUERY_AC + ' must be grater than 0')
-              }
-              if (v2 && (v2*1===0 || v2*1===1)) {
-                setPrio(client, process.env.KEY_POWERSTREAM_SN,v2);
-              }
-              else {
-                log(process.env.KEY_POWERSTREAM_SN + ' must be 0 or 1')
-              }
-              setTimeout(() => {
-                log('disconnect to Ecoflow MQTT broker')                    
-                client.end();
-              }, "3000");
-              //isMqttConnected = true
-*/
-          })
-        })
-        .catch();
-
+function initMqtt() {
+ 
+    if (isMqttConnected) {
+        log("Ecoflow MQTT broker is alreasdy connected");
+        return true;
     }
 
-})
-.catch();
+    log("Try to login Ecoflow MQTT broker with credential " + process.env.ACCOUNT_MAIL + ', ' + process.env.ACCOUNT_PASSWORD)
 
-app.get('/test', (req, res) => {
-    log('recevied datas from Ecoflow MQTT broker', mqttDaten)
-});
-
-app.get('/'+url, (req, res) => {
-  if (process.env.TOKEN && req.query[process.env.TOKEN] && (req.query[process.env.TOKEN] = process.env.TOKEN_VAL)) {
-    let v = req.query[process.env.KEY_QUERY_AC];
-    let v2 = req.query[process.env.KEY_QUERY_PRIO];
-    if (process.env.KEY_PASSWORD && process.env.KEY_MAIL && process.env.KEY_POWERSTREAM_SN && ( v || v2)) {
-      //changeWatt(v*1, process.env.KEY_PASSWORD, process.env.KEY_MAIL, process.env.KEY_POWERSTREAM_SN);
-      if (req.query[process.env.KEY_QUERY_AC] || req.query[process.env.KEY_QUERY_PRIO]) {
-        const {getEcoFlowMqttData, setupMQTTConnection, setAC, setPrio} = require(path.resolve( __dirname, "./ecoflow.js" ) );
-        mqttDaten = getEcoFlowMqttData(process.env.KEY_MAIL, process.env.KEY_PASSWORD)
-        .then(mqttDaten => {
-          if (mqttDaten) {
+    mqttDaten = getEcoFlowMqttData(process.env.ACCOUNT_MAIL, process.env.ACCOUNT_PASSWORD)
+    .then(mqttDaten => {
+    
+        if (mqttDaten) {
             log('recevied datas from Ecoflow MQTT broker', mqttDaten)
             setupMQTTConnection(mqttDaten)
-              .then (client => {
-                client.on('connect', function () {
+              .then (mqttClient => {
+                mqttClient.on('connect', function () {
                   log('connected to Ecoflow MQTT broker')
                   //console.log('Connecté au courtier Ecoflow MQTT');
-                  client.subscribe(['#'], () => {
+                  clientMqtt = mqttClient
+                  mqttClient.subscribe(['#'], () => {
                       log('Subscribe to Ecoflow MQTT topic #')
                   })
-  
-                  if (v && v*1>=0) {
-                    setAC(client, process.env.KEY_POWERSTREAM_SN,v*10);
-                  }
-                  else {
-                    log(process.env.KEY_QUERY_AC + ' must be grater than 0')
-                  }
-                  if (v2 && (v2*1===0 || v2*1===1)) {
-                    setPrio(client, process.env.KEY_POWERSTREAM_SN,v2);
-                  }
-                  else {
-                    log(process.env.KEY_POWERSTREAM_SN + ' must be 0 or 1')
-                  }
-                  setTimeout(() => {
-                    log('disconnect to Ecoflow MQTT broker')                    
-                    client.end();
-                  }, "3000");
-                  //isMqttConnected = true
+                  isMqttConnected = true;
               })
+              mqttClient.on('error', function (err) {
+                  log('Error Ecoflow MQTT broker: ' + err)
+                  if (err.code == 'ENOTFOUND') {
+                      log('Network error, Ecoflow MQTT broker')
+                  }
+              })
+              mqttClient.on('close', function () {
+                log('Connection closed by Ecoflow MQTT broker')
+                isMqttConnected = false;
+              })
+              mqttClient.on('disconnect ', function () {
+                log('Connection disconnect  by Ecoflow MQTT broker')
+                isMqttConnected = false;
+              })
+              mqttClient.on('reconnect', function () {
+                log('Client trying a reconnection Ecoflow MQTT broker')
+              })
+     
             })
             .catch();
-          }
-          else  {
-            log('not connected to Ecoflow MQTT broker')
-            res.send('not connected to Ecoflow MQTT broker');
-          }
+    
+        }
+    
+    })
+    .catch();
+};
 
-        })
-        .catch();
-      }
-      else {
-        log(process.env.KEY_QUERY_AC + ' or '  + process.env.KEY_QUERY_AC + ' are mandatory')
-        res.send(process.env.KEY_QUERY_AC + ' or '  + process.env.KEY_QUERY_AC + ' are mandatory')
-      }
+app.get('/setAC', (req, res) => {
+
+    initMqtt();
+
+    let deviceSn = req.query['device'];
+    let acPower = req.query['power'];
+
+    if (deviceSn && acPower) {
+
+        powerMax = parseInt(process.env.POWER_MAX)
+        acPower = parseInt(acPower);
+
+        if ((acPower<0) || (acPower>powerMax)) {
+            log('power must between 0 and ' + powerMax)
+            res.send('power must between 0 and ' + powerMax)
+        } else {
+            log('set power to ' + acPower + " Watt")
+            setAC(clientMqtt, deviceSn , acPower * 10);
+            res.send('success')
+        }
+
+    } else {
+
+        log('device or power are mandatory')
+        res.send('device or power are mandatory')
+
     }
-    else {
-      log(process.env.KEY_PASSWORD + ' are mandatory')
-      res.send(process.env.KEY_PASSWORD + ' are mandatory')
+
+});
+
+app.get('/setPriority', (req, res) => {
+
+    initMqtt();
+
+    let deviceSn = req.query['device'];
+    let priority = req.query['priority'];
+
+    if (deviceSn && priority) {
+
+        if ((priority*1===0 || priority*1===1)) {
+
+            log('set priority to ' + priority)
+            setPrio(clientMqtt, deviceSn, priority);
+            res.send('success')
+
+        } else {
+
+            log('priority must be 0 or 1')
+            res.send('priority must be 0 or 1')
+        }
+
+    } else {
+
+        log('device or power are mandatory')
+        res.send('device or power are mandatory')
+
     }
-  }
-  else {
-    log(process.env.TOKEN + ' are mandatory')
-    res.send(process.env.TOKEN + ' are mandatory')
-  }
+
 });
 
 app.use((req, res) => {res.status(404).send('Not found!')});
 
-var server = app.listen(port, () => {
-    var host = server.address().address;
-    var port = server.address().port;
-});
+if (process.env.ACCOUNT_MAIL && process.env.ACCOUNT_PASSWORD) {
+ 
+    initMqtt();
+
+    var server = app.listen(port, () => {
+        var host = server.address().address;
+        var port = server.address().port;
+    });
+
+} else {
+
+    log('ACCOUNT_MAIL and ACCOUNT_PASSWORD are mandatory');
+
+}
