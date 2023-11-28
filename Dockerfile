@@ -10,8 +10,7 @@ RUN apt-get install -y nano git htop
 
 WORKDIR /usr/src/app
 
-RUN git clone https://github.com/flexy2dd/ecoflow-powerstream-nodejs .
-#RUN git clone https://github.com/bogdancs92/ecoflow-powerstream-nodejs .
+RUN git clone https://github.com/bogdancs92/ecoflow-powerstream-nodejs .
 
 RUN npm install --development
 
